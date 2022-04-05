@@ -78,3 +78,7 @@ mongo-stop:
 .PHONY: mongo-shell
 mongo-shell:
 	docker exec -it mongo mongo
+
+.PHONY: docker
+docker:
+	docker build --no-cache --rm -t internal/tyk-gateway .

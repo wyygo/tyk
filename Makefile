@@ -81,4 +81,4 @@ mongo-shell:
 
 .PHONY: docker
 docker:
-	docker build --no-cache --rm -t internal/tyk-gateway .
+	docker build --rm -t internal/tyk-gateway .

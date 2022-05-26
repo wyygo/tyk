@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -20,7 +21,6 @@ var (
 	errEmptyServersObject = errors.New("servers object is empty in OAS")
 	errInvalidUpstreamURL = errors.New("invalid upstream URL")
 	errInvalidServerURL   = errors.New("error validating servers entry in OAS")
-	errMissingApiId       = errors.New("missing api ID")
 
 	errEmptySecurityObject = errors.New("security object is empty in OAS")
 	allowedMethods         = []string{
@@ -201,12 +201,12 @@ func getURLFormatErr(fromParam bool, upstreamURL string) error {
 
 func GetTykExtensionConfigParams(r *http.Request) *TykExtensionConfigParams {
 	queries := r.URL.Query()
-	upstreamURL := queries.Get("upstreamURL")
-	listenPath := queries.Get("listenPath")
-	customDomain := queries.Get("customDomain")
-	apiId := queries.Get("apiId")
-	validateRequest := getQueryValPtr(queries.Get("validateRequest"))
-	allowList := getQueryValPtr(queries.Get("allowList"))
+	upstreamURL := strings.TrimSpace(queries.Get("upstreamURL"))
+	listenPath := strings.TrimSpace(queries.Get("listenPath"))
+	customDomain := strings.TrimSpace(queries.Get("customDomain"))
+	apiId := strings.TrimSpace(queries.Get("apiId"))
+	validateRequest := getQueryValPtr(strings.TrimSpace(queries.Get("validateRequest")))
+	allowList := getQueryValPtr(strings.TrimSpace(queries.Get("allowList")))
 
 	if upstreamURL == "" && listenPath == "" && customDomain == "" && apiId == "" &&
 		validateRequest == nil && allowList == nil {

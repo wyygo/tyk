@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -19,24 +21,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/TykTechnologies/tyk/certs"
-
-	"github.com/TykTechnologies/tyk/config"
-
-	"github.com/TykTechnologies/tyk/apidef"
-
-	"github.com/TykTechnologies/tyk/apidef/oas"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-redis/redis/v8"
-
 	uuid "github.com/satori/go.uuid"
-
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"fmt"
-
+	"github.com/TykTechnologies/tyk/apidef"
+	"github.com/TykTechnologies/tyk/apidef/oas"
+	"github.com/TykTechnologies/tyk/certs"
+	"github.com/TykTechnologies/tyk/config"
 	"github.com/TykTechnologies/tyk/storage"
 	"github.com/TykTechnologies/tyk/test"
 	"github.com/TykTechnologies/tyk/user"
@@ -1481,16 +1476,20 @@ func TestGroupResetHandler(t *testing.T) {
 	ts := StartTest(nil)
 	defer ts.Close()
 
+	didSubscribe := make(chan bool)
 	didReload := make(chan bool)
+
 	cacheStore := storage.RedisCluster{RedisController: ts.Gw.RedisController}
 	cacheStore.Connect()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithTimeout(ts.Gw.ctx, time.Second)
 	defer cancel()
 
 	go func() {
 		err := cacheStore.StartPubSubHandler(ctx, RedisPubSubChannel, func(v interface{}) {
 			switch x := v.(type) {
+			case *redis.Subscription:
+				didSubscribe <- true
 			case *redis.Message:
 				notf := Notification{Gw: ts.Gw}
 				if err := json.Unmarshal([]byte(x.Payload), &notf); err != nil {
@@ -1501,11 +1500,13 @@ func TestGroupResetHandler(t *testing.T) {
 				}
 			}
 		})
-		if err != nil {
+		// ErrClosed is expected after ctx cancellation
+		if err != nil && !errors.Is(err, redis.ErrClosed) {
 			t.Log(err)
 			t.Fail()
 		}
 		close(didReload)
+		close(didSubscribe)
 	}()
 
 	uri := "/tyk/reload/group"
@@ -1520,6 +1521,7 @@ func TestGroupResetHandler(t *testing.T) {
 
 	// If we don't wait for the subscription to be done, we might do
 	// the reload before pub/sub is in place to receive our message.
+	<-didSubscribe
 	req := ts.withAuth(TestReq(t, "GET", uri, nil))
 
 	ts.mainRouter().ServeHTTP(recorder, req)
@@ -1538,7 +1540,7 @@ func TestGroupResetHandler(t *testing.T) {
 	// type of notifications may be received during tests, as this
 	// is the cluster channel:
 	select {
-	case <-time.After(time.Second):
+	case <-ctx.Done():
 		t.Fatal("Timeout waiting for reload signal")
 	case ok := <-didReload:
 		if !ok {

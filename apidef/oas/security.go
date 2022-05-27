@@ -204,6 +204,11 @@ type Basic struct {
 }
 
 func (b *Basic) Import(_ *openapi3.SecurityScheme, enable bool) {
+	b.Enabled = enable
+	b.Header = &AuthSource{
+		Enabled: true,
+		Name:    defaultAuthSourceName,
+	}
 }
 
 func (s *OAS) fillBasic(api apidef.APIDefinition) {
